@@ -22,7 +22,7 @@ You could then use Sinq with this database:
 
 [![asciicast](https://asciinema.org/a/508113.svg)](https://asciinema.org/a/508113)
 
-To run the test suite, run `yarn test`.
+To run the test suite, run `NODE_OPTIONS=--experimental-vm-modules yarn test`.
 
 ## TODO and contributing
 

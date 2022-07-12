@@ -1,5 +1,13 @@
 {
   "name": "sinq",
+  "description": "Nimble command-line data entry for SQLite with Inquirer",
+  "version": "0.1.0",
+  "author": "John L. Clark <john.l.clark@gmail.com>",
+  "homepage": "https://github.com/Juanc1to/sinq",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Juanc1to/sinq.git"
+  },
   "packageManager": "yarn@3.2.1",
   "type": "module",
   "scripts": {
@@ -16,5 +24,18 @@
   },
   "devDependencies": {
     "jest": "^28.1.2"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/Juanc1to/sinq/issues"
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "license": "GPL-3.0-or-later",
+  "keywords": [
+    "sqlite",
+    "inquirer",
+    "cli",
+    "command-line"
+  ]
 }
