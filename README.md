@@ -18,7 +18,7 @@ sqlite3 todo.db \
 '                   due datetime, completed datetime)'
 ```
 
-You could then use Sink with this database:
+You could then use Sinq with this database:
 
 [![asciicast](https://asciinema.org/a/508113.svg)](https://asciinema.org/a/508113)
 
