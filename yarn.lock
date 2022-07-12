@@ -3696,6 +3696,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"sinq@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "sinq@workspace:."
+  dependencies:
+    better-sqlite3: ^7.5.3
+    chalk: ^5.0.1
+    immutable: ^4.1.0
+    inquirer: ^9.0.0
+    inquirer-search-list: ^1.2.6
+    jest: ^28.1.2
+    lodash: ^4.17.21
+  languageName: unknown
+  linkType: soft
+
 "sisteransi@npm:^1.0.5":
   version: 1.0.5
   resolution: "sisteransi@npm:1.0.5"
@@ -3761,20 +3775,6 @@ __metadata:
   checksum: 19d79aec211f09b99ec3099b5b2ae2f6e9cdefe50bc91ac4c69144b6d3928a640bb6ae5b3def70c2e85a2c3d9f5ec2719921e3a59d3ca3ef4b2fd1a4656a0df3
   languageName: node
   linkType: hard
-
-"sqlite-nimble@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "sqlite-nimble@workspace:."
-  dependencies:
-    better-sqlite3: ^7.5.3
-    chalk: ^5.0.1
-    immutable: ^4.1.0
-    inquirer: ^9.0.0
-    inquirer-search-list: ^1.2.6
-    jest: ^28.1.2
-    lodash: ^4.17.21
-  languageName: unknown
-  linkType: soft
 
 "ssri@npm:^9.0.0":
   version: 9.0.1
