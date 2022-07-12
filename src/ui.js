@@ -54,9 +54,18 @@ function input_parse(input, answers, output='') {
     space_index > -1
     ? space_index
     : undefined
-  ));
-  if (command === 'null' && output === '' && prefix === '') {
-    return null;
+  )).toLowerCase();
+  if (output === '' && prefix === ''
+      && _.includes(['null', 'true', 'false'], command)) {
+    if (command === 'null') {
+      return null;
+    }
+    if (command === 'true') {
+      return 1;
+    }
+    if (command === 'false') {
+      return 0;
+    }
   }
   return input_parse(remainder, answers, output.concat(
     prefix,
