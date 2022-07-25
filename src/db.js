@@ -1,4 +1,7 @@
 import immutable from 'immutable';
+import cliTruncate from 'cli-truncate';
+import chalk from 'chalk';
+import process from 'node:process';
 
 import { pick, undefined_default } from './util.js';
 
@@ -27,20 +30,9 @@ function escape_identifier(identifier) {
   return ''.concat('"', identifier.replace(/"/, '""'), '"');
 }
 
-function row_summary(row, columns=undefined) {
-  if (columns === undefined) {
-    columns = Object.keys(row);
-  }
-  return columns.reduce(function (output, column, index) {
-    return output.concat(
-      (
-        index === 0
-        ? ''
-        : '; '
-      ),
-      row[column]
-    );
-  }, '');
+function get_row_value(config) {
+  let { row, value_columns } = config;
+  return pick(row, value_columns);
 }
 
 // Use e.g. with an insert column list, or a select where clause with `suffix`
@@ -149,17 +141,63 @@ function db_utils(db) {
     }, {});
   }
 
-  //function row_summary(table, row, column=undefined) {
-   // const columns = column_list({
-    //  table,
-     // exclude_all_pks: true,
-    //});
-  //}
+  // This recursively "expands" foreign key references of a single column.
+  function row_summary(config) {
+    let { table, row, columns, table_history = immutable.Set() } = config;
+
+    if (columns === undefined) {
+      columns = immutable.OrderedSet(Object.keys(row));
+    } else {
+      columns = immutable.OrderedSet(columns);
+    }
+    if (!table_history.has(table)) {
+      const fkrs = foreign_key_references(table);
+      fkrs.forEach(function (fkr) {
+        if (fkr.get('from').size === 1) {
+          const from_column = fkr.getIn(['from', 0]);
+          if (columns.has(from_column)) {
+            const parent_table = fkr.getIn(['to', 'table']);
+            const restricting_values = {};
+            const rowval = row[from_column];
+            restricting_values[fkr.getIn(['to', 'columns', 0])] = rowval;
+            row[from_column] = row_summary({
+              table: parent_table,
+              row: filtered_rows({
+                table: parent_table,
+                restricting_values,
+              })[0],
+              table_history: table_history.add(table),
+            });
+            //console.log(row[from_column]);
+            if(table_history.size === 0) {
+              row[from_column] = ''.concat(
+                chalk.green(row[from_column]),
+                ' (',
+                rowval,
+                ')',
+              );
+            }
+          }
+        }
+      });
+    }
+
+    return columns.toList().reduce(function (output, column, index) {
+      return output.concat(
+        (
+          index === 0
+          ? ''
+          : '; '
+        ),
+        row[column]
+      );
+    }, '');
+  }
 
   function filtered_rows(config) {
     let { table, restricting_values } = config;
     restricting_values = undefined_default(restricting_values, {});
-    console.log('restricting_values:', restricting_values);
+    //console.log('restricting_values:', restricting_values);
 
     let { sql_clause: where_clause, param_list } = clause_with_columns({
       row_data: restricting_values,
@@ -191,7 +229,7 @@ function db_utils(db) {
 
   function row_choices(config) {
     let { table, value_columns, restricting_values,
-          display_columns } = config;
+          display_columns, } = config;
 
     const rows = filtered_rows(config);
     if (rows.length === 0) {
@@ -202,25 +240,85 @@ function db_utils(db) {
         },
       ];
     }
+    if (value_columns === undefined) {
+      value_columns = column_list({
+        table,
+        include_only_pks: true,
+      }).map(function (column) {
+        return column.name;
+      });
+    }
     return rows.map(function (row) {
-      if (value_columns === undefined) {
-        value_columns = column_list({
-          table,
-          include_only_pks: true,
-        }).map(function (column) {
-          return column.name;
-        });
-      }
       /*console.log('row:', row);
       console.log('value_columns:', value_columns);
       console.log('pick:', pick(row, value_columns));*/
-      const choice_name = row_summary(row, display_columns);
+      const choice_name = cliTruncate(
+        row_summary({
+          table,
+          row,
+          display_columns,
+        }).trim().replace(/\n/g, ' '),
+        process.stdout.columns - 2,
+      );
+      const key = pick(row, value_columns);
       return {
         name: choice_name,
         short: choice_name,
-        value: pick(row, value_columns),
+        value: key,
       };
     });
+  }
+
+  function row_choices_info(config) {
+    let { table, value_columns, restricting_values,
+          display_columns, selected_value } = config;
+
+    const rows = filtered_rows(config);
+    if (rows.length === 0) {
+      return [
+        {
+          name: 'No choices available!',
+          value: undefined,
+        },
+      ];
+    }
+    if (value_columns === undefined) {
+      value_columns = column_list({
+        table,
+        include_only_pks: true,
+      }).map(function (column) {
+        return column.name;
+      });
+    }
+    let selected_index = undefined;
+    const choices = rows.map(function (row, choice_index) {
+      /*console.log('row:', row);
+      console.log('value_columns:', value_columns);
+      console.log('pick:', pick(row, value_columns));*/
+      const choice_name = cliTruncate(
+        row_summary({
+          table,
+          row,
+          display_columns,
+        }).trim().replace(/\n/g, ' '),
+        process.stdout.columns - 2,
+      );
+      const key = pick(row, value_columns);
+      if (immutable.Map(key).equals(immutable.Map(selected_value))) {
+        selected_index = choice_index;
+      }
+      return {
+        name: choice_name,
+        short: choice_name,
+        value: choice_index,
+        key,
+      };
+    });
+
+    return {
+      choices,
+      selected_index,
+    };
   }
 
   function insert(table, row_data) {
@@ -271,9 +369,10 @@ function db_utils(db) {
     foreign_key_references,
     filtered_rows,
     row_choices,
+    row_choices_info,
     insert,
     update,
   });
 }
 
-export { sqlite3_affinity, db_utils };
+export { sqlite3_affinity, get_row_value, db_utils };

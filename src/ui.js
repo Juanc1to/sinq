@@ -1,14 +1,27 @@
 import inquirer from 'inquirer';
-import inquirer_search_list from 'inquirer-search-list';
+// Why does this the following work for inquirer-search-list but not here?
+//import InputPrompt from 'inquirer/lib/prompts/input';
+import inquirer_search_list from '@Juancito/inquirer-search-list';
 import chalk from 'chalk';
 import _ from 'lodash';
 
 inquirer.registerPrompt('search-list', inquirer_search_list);
 
-import { undefined_default, separate_sentinels, rekey } from './util.js';
+import { pick, undefined_default, separate_sentinels, rekey } from './util.js';
 import { sqlite3_affinity } from './db.js';
 
 //const ui = new inquirer.ui.BottomBar();
+
+class StrictInput extends inquirer.prompt.prompts.input {
+  filterInput(input) {
+    if (!input) {
+      return this.opt.default;
+    }
+    return input;
+  }
+}
+
+inquirer.registerPrompt('strict-input', StrictInput);
 
 function friendly_column_name(column) {
   return column.replace(/_/i, ' ');
@@ -31,7 +44,17 @@ function initial_menu(db_utils) {
   });
 }
 
+function escape(row_data) {
+  if (typeof row_data === 'string') {
+    return row_data.replace(/\//g, '\\/');
+  }
+  return row_data;
+}
+
 function input_parse(input, answers, output='') {
+  if (!(typeof input === 'string')) {
+    return input;
+  }
   const special_index = input.search(/[\\\/]./);
   if (special_index === -1) {
     return output.concat(input);
@@ -140,43 +163,78 @@ function edit_row(config) {
       );*/
     }).map(function (column) {
       const column_name = column.name;
+      console.log(column_name);
       if (sentinel_ordering.has(column_name)) {
         const fk_nr = sentinel_ordering.get(column_name);
         const parent_table_name = fkrs.getIn([fk_nr, 'to', 'table']);
         const parent_pk_columns = fkrs.getIn([fk_nr, 'to', 'columns']);
         const child_pk_columns = fkrs.getIn([fk_nr, 'from']);
+        const selected_value = rekey(
+          pick(row, child_pk_columns.toArray()),
+          _.zip(child_pk_columns.toArray(), parent_pk_columns.toArray()),
+        );
+        console.log('selected_value:', selected_value);
+        // This might be better/safer as a more sophisticated object (or just a
+        // wrapper function for a prompt config object) that keeps track of the
+        // remapping logic internally.  Also, could it depend directly on
+        // `db_info.row_choices`, so that it could be moved into this module?
+        // I think it might make sense to call it `foreign_key_choices`.
+        const choices_info = db_utils.row_choices_info({
+          table: parent_table_name,
+          value_columns: parent_pk_columns,
+          selected_value,
+          // TODO: The thing we do below should probably be a utility
+          // function (something like `rekey`?) for clarity and unit
+          // testing.  Also, I think this is incorrect as written.
+          /*restricting_values: Object.entries(answers).reduce(
+              function (pk_answers, child_entry, child_column_index) {
+            const [ child_column, value ] = child_entry;
+            if (child_pk_columns.indexOf(child_column) !== -1) {
+              const parent_column = parent_pk_columns.get(
+                child_column_index,
+              );
+              pk_answers[parent_column] = value;
+            }
+            return pk_answers;
+          }, {}),*/
+        });
+        console.log('selected_index:', choices_info.selected_index, choices_info.choices[choices_info.selected_index]);
         return {
           type: 'search-list',
           name: column_name,
           message: friendly_column_name(column_name),
-          default: row[column_name],
-          choices: function (answers) {
-            return db_utils.row_choices({
-              table: parent_table_name,
-              value_columns: parent_pk_columns,
-              // TODO: The thing we do below should probably be a utility
-              // function (something like `rekey`?) for clarity and unit
-              // testing.  Also, I think this is incorrect as written.
-              /*restricting_values: Object.entries(answers).reduce(
-                  function (pk_answers, child_entry, child_column_index) {
-                const [ child_column, value ] = child_entry;
-                if (child_pk_columns.indexOf(child_column) !== -1) {
-                  const parent_column = parent_pk_columns.get(
-                    child_column_index,
-                  );
-                  pk_answers[parent_column] = value;
-                }
-                return pk_answers;
-              }, {}),*/
+          default: choices_info.selected_index,
+          // choices_info could include a function to use here, if we want to
+          // restore using dynamic choices (taking into account previous
+          // answers):
+          choices: choices_info.choices,
+          /*source: function (answers, input = '') {
+            return new Promise(function (resolve) {
+              resolve(
+                choices_info.choices.filter(function (choice) {
+                  choice.includes(input);
+                })
+              );
             });
+          },*/
+          filter: function (response) {
+            return choices_info.choices[response].key
           },
         };
       }
       return {
+        type: 'strict-input',
         name: column_name,
         message: friendly_column_name(column_name),
-        default: row[column_name],
-        suffix: chalk.yellow.dim(' ('.concat(column.type.toLowerCase(), ')')),
+        default: escape(row[column_name]),
+        suffix: ''.concat(
+          chalk.yellow.dim(' ('.concat(column.type.toLowerCase(), ')')),
+          (
+            row[column_name] === null
+            ? chalk.red.dim(' ('.concat('null', ')'))
+            : ''
+          ),
+        ),
         filter: input_parse,
         transformer: function (input) {
           if (input === null) {
@@ -327,6 +385,7 @@ function table_options(db_utils, table_name) {
           value: 'new',
         },
         {
+          // TODO: does this only make sense for uniquely-valued columns?
           name: 'Search for rows by column',
           value: 'column_search',
         },
