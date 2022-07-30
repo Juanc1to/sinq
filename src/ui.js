@@ -1,6 +1,5 @@
 import inquirer from 'inquirer';
-// Why does this the following work for inquirer-search-list but not here?
-//import InputPrompt from 'inquirer/lib/prompts/input';
+import InputPrompt from 'inquirer/lib/prompts/input.js';
 import inquirer_search_list from '@Juancito/inquirer-search-list';
 import chalk from 'chalk';
 import _ from 'lodash';
@@ -12,7 +11,7 @@ import { sqlite3_affinity } from './db.js';
 
 //const ui = new inquirer.ui.BottomBar();
 
-class StrictInput extends inquirer.prompt.prompts.input {
+class StrictInput extends InputPrompt {
   filterInput(input) {
     if (!input) {
       return this.opt.default;
@@ -103,7 +102,9 @@ function rekey_from_fkrs(row_answers, fkrs, sentinel_ordering) {
   const merge_list = Object.entries(row_answers).reduce(
     function (list, entry) {
       const [ column_name, answer ] = entry;
-      if (!sentinel_ordering.has(column_name)) {
+      // An answer of `null` corresponds to a NULL in the database, that is, no
+      // value, so we continue.
+      if (answer === null || !sentinel_ordering.has(column_name)) {
         return list;
       }
       const fk_nr = sentinel_ordering.get(column_name);
@@ -179,7 +180,7 @@ function edit_row(config) {
         // remapping logic internally.  Also, could it depend directly on
         // `db_info.row_choices`, so that it could be moved into this module?
         // I think it might make sense to call it `foreign_key_choices`.
-        const choices_info = db_utils.row_choices_info({
+        const choices_info = db_utils.reference_selection({
           table: parent_table_name,
           value_columns: parent_pk_columns,
           selected_value,

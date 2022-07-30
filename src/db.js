@@ -159,23 +159,25 @@ function db_utils(db) {
             const parent_table = fkr.getIn(['to', 'table']);
             const restricting_values = {};
             const rowval = row[from_column];
-            restricting_values[fkr.getIn(['to', 'columns', 0])] = rowval;
-            row[from_column] = row_summary({
-              table: parent_table,
-              row: filtered_rows({
+            if (rowval !== null) {
+              restricting_values[fkr.getIn(['to', 'columns', 0])] = rowval;
+              row[from_column] = row_summary({
                 table: parent_table,
-                restricting_values,
-              })[0],
-              table_history: table_history.add(table),
-            });
-            //console.log(row[from_column]);
-            if(table_history.size === 0) {
-              row[from_column] = ''.concat(
-                chalk.green(row[from_column]),
-                ' (',
-                rowval,
-                ')',
-              );
+                row: filtered_rows({
+                  table: parent_table,
+                  restricting_values,
+                })[0],
+                table_history: table_history.add(table),
+              });
+              //console.log(row[from_column]);
+              if(table_history.size === 0) {
+                row[from_column] = ''.concat(
+                  chalk.green(row[from_column]),
+                  ' (',
+                  rowval,
+                  ')',
+                );
+              }
             }
           }
         }
@@ -256,7 +258,7 @@ function db_utils(db) {
         row_summary({
           table,
           row,
-          display_columns,
+          columns: display_columns,
         }).trim().replace(/\n/g, ' '),
         process.stdout.columns - 2,
       );
@@ -269,9 +271,17 @@ function db_utils(db) {
     });
   }
 
-  function row_choices_info(config) {
+  function reference_selection(config) {
     let { table, value_columns, restricting_values,
           display_columns, selected_value } = config;
+    if (value_columns === undefined) {
+      value_columns = column_list({
+        table,
+        include_only_pks: true,
+      }).map(function (column) {
+        return column.name;
+      });
+    }
 
     const rows = filtered_rows(config);
     if (rows.length === 0) {
@@ -282,41 +292,51 @@ function db_utils(db) {
         },
       ];
     }
-    if (value_columns === undefined) {
-      value_columns = column_list({
-        table,
-        include_only_pks: true,
-      }).map(function (column) {
-        return column.name;
-      });
-    }
+
+    // This function returns a list of "special" choices for an Inquirer
+    // prompt.  They are special in the sense that they have integer `value`
+    // fields and an additional `key` field, which is used to retrieve the
+    // foreign key reference from the choice object.  Ideally, we would like to
+    // store that key directly in `value`, but currently Inquirer only allows
+    // choosing default choices based on scalar values (and in particular the
+    // `===` operator), so we have to do this little dance.
+    const starting_choices = [
+      {
+        name: 'No value (null)',
+        short: chalk.red.dim('null'),
+        value: 0,
+        key: null,
+      },
+    ];
+
     let selected_index = undefined;
     const choices = rows.map(function (row, choice_index) {
       /*console.log('row:', row);
       console.log('value_columns:', value_columns);
       console.log('pick:', pick(row, value_columns));*/
+      const offset_index = choice_index + starting_choices.length;
       const choice_name = cliTruncate(
         row_summary({
           table,
           row,
-          display_columns,
+          columns: display_columns,
         }).trim().replace(/\n/g, ' '),
         process.stdout.columns - 2,
       );
       const key = pick(row, value_columns);
       if (immutable.Map(key).equals(immutable.Map(selected_value))) {
-        selected_index = choice_index;
+        selected_index = offset_index;
       }
       return {
         name: choice_name,
         short: choice_name,
-        value: choice_index,
+        value: offset_index,
         key,
       };
     });
 
     return {
-      choices,
+      choices: starting_choices.concat(choices),
       selected_index,
     };
   }
@@ -369,7 +389,7 @@ function db_utils(db) {
     foreign_key_references,
     filtered_rows,
     row_choices,
-    row_choices_info,
+    reference_selection,
     insert,
     update,
   });
