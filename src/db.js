@@ -74,12 +74,14 @@ function db_utils(db) {
   const exclude_pk_columns_query = db.prepare(`
     select * from pragma_table_info(?) where pk = 0
   `);
+  // This returns a list of rows about each column (so if e.g. all you want is
+  // a list of column names, you'll need to do some `map`ping from this list).
   function column_list(config) {
-    let { table, exclude_rowid_pks, exclude_all_pks,
-          include_only_pks } = config;
-    exclude_rowid_pks = undefined_default(exclude_rowid_pks, false);
+    let { table, exclude_rowid_pks = false, exclude_all_pks = false,
+          include_only_pks = false } = config;
+    /*exclude_rowid_pks = undefined_default(exclude_rowid_pks, false);
     exclude_all_pks = undefined_default(exclude_all_pks, false);
-    include_only_pks = undefined_default(include_only_pks, false);
+    include_only_pks = undefined_default(include_only_pks, false);*/
 
     const pk_columns = columns_query.all(table, 0);
     if (exclude_rowid_pks && pk_columns.length === 1) {
@@ -99,7 +101,7 @@ function db_utils(db) {
   function column_choices(table) {
     return column_list({
       table,
-      exclude_rowid_pks: true,
+      //exclude_rowid_pks: true,
     }).map(function (column) {
       return {
         name: column.name,
@@ -142,11 +144,18 @@ function db_utils(db) {
   }
 
   // This recursively "expands" foreign key references of a single column.
+  // Question: do we want to include primary keys in these summary listings?
   function row_summary(config) {
     let { table, row, columns, table_history = immutable.Set() } = config;
 
     if (columns === undefined) {
-      columns = immutable.OrderedSet(Object.keys(row));
+      //columns = immutable.OrderedSet(Object.keys(row));
+      columns = immutable.OrderedSet(column_list({
+        table,
+        //exclude_rowid_pks: true,
+      }).map(function (column) {
+        return column.name;
+      }));
     } else {
       columns = immutable.OrderedSet(columns);
     }
@@ -169,8 +178,7 @@ function db_utils(db) {
                 })[0],
                 table_history: table_history.add(table),
               });
-              //console.log(row[from_column]);
-              if(table_history.size === 0) {
+              if (table_history.size === 0) {
                 row[from_column] = ''.concat(
                   chalk.green(row[from_column]),
                   ' (',
@@ -197,9 +205,8 @@ function db_utils(db) {
   }
 
   function filtered_rows(config) {
-    let { table, restricting_values } = config;
-    restricting_values = undefined_default(restricting_values, {});
-    //console.log('restricting_values:', restricting_values);
+    let { table, restricting_values = {} } = config;
+    //restricting_values = undefined_default(restricting_values, {});
 
     let { sql_clause: where_clause, param_list } = clause_with_columns({
       row_data: restricting_values,
@@ -210,7 +217,6 @@ function db_utils(db) {
       where_clause = ' where '.concat(where_clause);
     }
 
-    console.log(where_clause, param_list);
     return db.prepare(''.concat(
       'select *',
       /*value_columns.reduce(function (output, column, index) {
@@ -251,9 +257,6 @@ function db_utils(db) {
       });
     }
     return rows.map(function (row) {
-      /*console.log('row:', row);
-      console.log('value_columns:', value_columns);
-      console.log('pick:', pick(row, value_columns));*/
       const choice_name = cliTruncate(
         row_summary({
           table,
@@ -311,9 +314,6 @@ function db_utils(db) {
 
     let selected_index = undefined;
     const choices = rows.map(function (row, choice_index) {
-      /*console.log('row:', row);
-      console.log('value_columns:', value_columns);
-      console.log('pick:', pick(row, value_columns));*/
       const offset_index = choice_index + starting_choices.length;
       const choice_name = cliTruncate(
         row_summary({
@@ -345,7 +345,6 @@ function db_utils(db) {
     const { sql_clause: columns_clause, param_list } = clause_with_columns({
       row_data
     });
-    console.log(row_data);
 
     return db.prepare(''.concat(
       'insert into ',
@@ -359,7 +358,6 @@ function db_utils(db) {
   }
 
   function update(table, key, row_data) {
-    console.log('update:', key, row_data);
     const { sql_clause: set_clause,
             param_list: set_params } = clause_with_columns({
       row_data,
